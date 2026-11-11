@@ -16,11 +16,32 @@ para crear la cuenta de administrador. Instalación manual: copia `.env.example`
 
 ## Instalación rápida (one-liner)
 
+### Linux / WSL2
 ```bash
 curl -sSL https://raw.githubusercontent.com/joacoolopezz/LoomPanel/main/install.sh | sudo bash
 ```
+> Usa `systemd`, `apt/dnf/yum`, `ufw` y rutas `/opt/...`. Requiere root/sudo.
 
-Requiere: Linux (Ubuntu/Debian/CentOS/Fedora/Arch), root/sudo, conexión a internet.
+### macOS (con Homebrew)
+```bash
+curl -sSL https://raw.githubusercontent.com/joacoolopezz/LoomPanel/main/install.sh | sed 's/apt-get install/brew install/g; s/systemctl/brew services/g; s/ufw //g' | bash
+```
+> Requiere: **Homebrew** instalado, **Docker Desktop** corriendo. No usa `sudo` (instala en `~/loompanel`).
+
+### Windows (PowerShell como Administrador)
+```powershell
+irm https://raw.githubusercontent.com/joacoolopezz/LoomPanel/main/install.ps1 | iex
+```
+> Requiere: **Docker Desktop** instalado y corriendo, **WSL2** habilitado. Instala en `C:\loompanel`.
+
+### Manual (cualquier SO con Docker)
+```bash
+git clone https://github.com/joacoolopezz/LoomPanel.git
+cd LoomPanel
+cp .env.example .env
+# Edita .env: GP_DATA_DIR=ruta/local, GP_PORT=8080, etc.
+docker compose up -d --build
+```
 
 ## Qué incluye
 
