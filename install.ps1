@@ -127,7 +127,9 @@ for ($i=0; $i -lt 40; $i++) {
 }
 
 # --- Show result ---
-$ip = (Invoke-RestMethod -Uri "https://api.ipify.org" -Method Get -ErrorAction SilentlyContinue) ?? (Test-Connection -ComputerName (hostname) -Count 1).IPV4Address.IPAddressToString
+$ip = $null
+try { $ip = Invoke-RestMethod -Uri "https://api.ipify.org" -Method Get -ErrorAction Stop } catch { }
+if (-not $ip) { $ip = (Test-Connection -ComputerName (hostname) -Count 1 -ErrorAction SilentlyContinue).IPV4Address.IPAddressToString }
 
 Write-Host "`n" + "="*55
 Write-Host "  LoomPanel is running!" -ForegroundColor Green
@@ -135,8 +137,8 @@ Write-Host "="*55
 if ($domain) {
     Write-Host "  Panel:  https://$domain   (point A record to $ip first)"
 } else {
-    Write-Host "  Panel:  http://$ip:$port"
-    Write-Host "  Local:  http://localhost:$port"
+    Write-Host "  Panel:  http://${ip}:${port}"
+    Write-Host "  Local:  http://localhost:${port}"
 }
 Write-Host "  Setup code: $token"
 Write-Host "  Game ports: 25565-25665/tcp (open in Windows Firewall / cloud firewall)"
