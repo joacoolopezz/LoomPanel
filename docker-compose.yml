@@ -1,0 +1,32 @@
+# Generated values live in .env (the installer writes it). See .env.example.
+services:
+  panel:
+    build: .
+    container_name: loompanel
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      GP_DATA: ${GP_DATA_DIR}
+      GP_ADDR: ":8080"
+      TZ: ${TZ:-UTC}
+      GP_LANG: ${GP_LANG:-es}
+    ports:
+      - "${GP_BIND:-0.0.0.0}:${GP_PORT:-8080}:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Same path inside and outside: game containers bind-mount these folders from the host.
+      - ${GP_DATA_DIR}:${GP_DATA_DIR}
+
+  # Automatic HTTPS (Let's Encrypt). Only starts when COMPOSE_PROFILES=https (set when you give a domain).
+  caddy:
+    image: caddy:2-alpine
+    profiles: ["https"]
+    container_name: loompanel-caddy
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+
+volumes:
+  caddy_data:

@@ -1,0 +1,98 @@
+[
+  {
+    "file": "C:\\Users\\User\\Downloads\\loompanel\\backend\\files.go",
+    "line": 25,
+    "summary": "safePath has TOCTOU race condition allowing path traversal via symlink swap",
+    "failure_scenario": "Attacker with filesystem access calls safePath which resolves a path within the instance directory; between the symlink resolution (line 43) and the actual file operation (e.g., os.Open in handleFileRead line 107), attacker replaces a directory component with a symlink pointing outside the instance directory (e.g., /etc); the subsequent file operation follows the symlink and accesses unauthorized files"
+  },
+  {
+    "file": "C:\\Users\\User\\Downloads\\loompanel\\backend\\mods.go",
+    "line": 174,
+    "summary": "installProject releases modMu lock during download creating check-then-act race condition for duplicate mod installations",
+    "failure_scenario": "Two concurrent requests to install the same mod project both pass the 'already installed' check (lines 175-178) while modMu is held; first request releases lock at line 181, starts download (line 199); second request acquires lock, also passes check (metadata not yet updated), starts duplicate download; both complete and write metadata, wasting bandwidth and disk I/O, potentially corrupting mod metadata"
+  },
+  {
+    "file": "C:\\Users\\User\\Downloads\\loompanel\\backend\\domain.go",
+    "line": 30,
+    "summary": "publicIPCached returns stale IP while asynchronously refreshing, causing Cloudflare DNS updates to use outdated IP",
+    "failure_scenario": "Cache expires (older than 1 hour); caller invokes publicIPCached() which immediately returns stale ipCache (line 49) and spawns background goroutine to fetch new IP; handleDomainGet returns stale IP to frontend; user triggers Cloudflare DNS update (handleDomainCloudflare) which uses the stale IP from publicIPCached (line 239), creating DNS record pointing to old server IP; players cannot connect until cache refreshes (up to 5 minutes)"
+  },
+  {
+    "file": "C:\\Users\\User\\Downloads\\loompanel\\backend\\totp.go",
+    "line": 92,
+    "summary": "Ticket map cleanup only runs on new ticket creation, causing memory leak when no new 2FA logins occur",
+    "failure_scenario": "Admin enables 2FA for many users; each login creates a ticket (line 101) with 5-minute expiry; if users stop logging in with 2FA, newTicket is never called again; expired tickets accumulate indefinitely in the tickets map (line 89), growing memory usage without bound; server restart required to clear"
+  },
+  {
+    "file": "C:\\Users\\User\\Downloads\\loompanel\\backend\\util.go",
+    "line": 78,
+    "summary": "loginLimiter map never removes unused keys, allowing unbounded memory growth under credential stuffing attack",
+    "failure_scenario": "Attacker tries login with 100,000 different username/IP combinations; each failed attempt calls loginLimiter.hit (line 96) which adds entry to map; tooMany only cleans entries for the specific key being checked (lines 85-90); keys for other IPs/usernames never expire; map grows to 100,000+ entries consuming significant memory; server OOM possible under sustained attack"
+  },
+  {
+    "file": "C:\\Users\\User\\Downloads\\loompanel\\backend\\schedule.go",
+    "line": 48,
+    "summary": "parseField incorrectly handles single value with step (e.g., '5/2') by expanding to full range instead of treating as single value",
+    "failure_scenario": "User creates schedule with cron '5/2 * * * *' intending minute 5 only; parseField treats '5/2' as range 5-59 step 2 (line 49: b=hi), matching minutes 5,7,9,...,59; schedule runs 28 times per hour instead of once; user observes excessive server restarts/backups/commands"
+  },
+  {
+    "file": "C:\\Users\\User\\Downloads\\loompanel\\backend\\backup.go",
+    "line": 145,
+    "summary": "extractTar forces file permissions with '|0o600' altering original archive permissions, potentially adding write access to read-only files",
+    "failure_scenario": "Backup contains a read-only config file (mode 0444); on restore, extractTar opens file with mode (0444 & 0777) | 0600 = 0644 (line 145); restored file is now writable by owner when it should be read-only; if this is a security-sensitive file (e.g., server.properties with immutable flag intended), the protection is lost"
+  },
+  {
+    "file": "C:\\Users\\User\\Downloads\\loompanel\\backend\\totp.go",
+    "line": 42,
+    "summary": "verifyTOTP replay protection has race condition allowing concurrent requests with same code to both succeed",
+    "failure_scenario": "User's authenticator app shows code '123456' for current 30s window; attacker captures code and sends two simultaneous /api/login/2fa requests; both read totp_last=1000 from DB (line 38); both compute base=1001; both pass check 'base+d <= last' (1001 <= 1000 false); both update totp_last to 1001 (line 45); both authenticate successfully; single code used twice"
+  },
+  {
+    "file": "C:\\Users\\User\\Downloads\\loompanel\\backend\\files.go",
+    "line": 147,
+    "summary": "handleDownload ignores errors during zip creation, sending potentially corrupted zip to client with no error indication",
+    "failure_scenario": "User downloads large world directory as zip; during WalkDir (line 147), a file read error occurs (e.g., file deleted mid-walk, permission denied); callback returns error but it's discarded with '_ ='; zw.Close() in defer finalizes incomplete zip; client receives corrupted zip file with no error response (headers already sent); user's backup appears complete but is missing files"
+  },
+  {
+    "file": "C:\\Users\\User\\Downloads\\loompanel\\backend\\main.go",
+    "line": 90,
+    "summary": "First-run setup token logged in plaintext, exposing admin credential in log files and systemd journal",
+    "failure_scenario": "Fresh deployment starts; no users exist; setup token generated (line 89) and logged via log.Printf (line 90); token appears in stdout/stderr, captured by systemd journal, log aggregation systems, Docker logs; any log viewer (including compromised log access) can retrieve token and complete admin setup before legitimate admin"
+  },
+  {
+    "file": "C:\\Users\\User\\Downloads\\loompanel\\backend\\tokens.go",
+    "line": 76,
+    "summary": "API token prefix only 7 characters ('gp_' + 4 hex bytes), creating collision risk in token listing and audit logs",
+    "failure_scenario": "User creates multiple tokens; prefix shown in UI is only first 7 chars of 43-char token (e.g., 'gp_a1b2c3d'); birthday paradox: with ~5000 tokens, 50% chance of prefix collision; user cannot distinguish tokens in list; audit logs show only prefix, making forensic analysis impossible when prefixes collide"
+  },
+  {
+    "file": "C:\\Users\\User\\Downloads\\loompanel\\backend\\loaders.go",
+    "line": 174,
+    "summary": "Hardcoded 3GB memory limit for Forge/NeoForge/Quilt installer containers may be insufficient for large modpacks",
+    "failure_scenario": "User creates Forge instance with large modpack (300+ mods); installer runs in container with '-m 3g' (line 174); installer JVM needs more than 3GB for dependency resolution and jar processing; container OOM kills installer; installation fails with generic error; user cannot install modpack despite host having adequate RAM"
+  },
+  {
+    "file": "C:\\Users\\User\\Downloads\\loompanel\\backend\\files.go",
+    "line": 360,
+    "summary": "handleFetch has hardcoded 1GB download limit (1<<30) with no configuration option",
+    "failure_scenario": "User attempts to download a 1.5GB modpack via URL fetch; io.LimitReader caps at 1GB (line 360); download succeeds partially but file is truncated; server saves corrupted jar; instance fails to start with cryptic error; user has no way to increase limit without recompiling"
+  },
+  {
+    "file": "C:\\Users\\User\\Downloads\\loompanel\\backend\\runtime.go",
+    "line": 275,
+    "summary": "pollOnce calls watchLogs for all running instances every 2 seconds, creating redundant goroutine start attempts",
+    "failure_scenario": "Panel runs with 50 instances; pollOnce executes every 2 seconds (line 283); for each running instance, watchLogs is called (line 275); watchLogs acquires hubsMu lock (line 123), checks watching map (line 124), releases; 50 lock acquisitions every 2 seconds adds contention; under high load, this contributes to scheduler latency and CPU overhead"
+  },
+  {
+    "file": "C:\\Users\\User\\Downloads\\loompanel\\backend\\mods.go",
+    "line": 22,
+    "summary": "allowLocalDL global variable used for testing creates test/production code path confusion and potential security issue if accidentally enabled",
+    "failure_scenario": "Developer runs tests which set allowLocalDL=true (line 155 in phase2_test.go); if test crashes before cleanup (line 156), variable remains true; subsequent production mod installs bypass host allowlist (line 105-106), allowing downloads from arbitrary HTTP hosts including localhost/private IPs; SSRF protection defeated"
+  },
+  {
+    "file": "C:\\Users\\User\\Downloads\\loompanel\\backend\\auth.go",
+    "line": 108,
+    "summary": "CSRF protection (X-GP header check) only applies to write operations, but some GET endpoints have side effects (e.g., /api/invites/{token} accepts invite)",
+    "failure_scenario": "Attacker crafts malicious page with <img src='https://panel.example.com/api/invites/valid-token'>; victim visits page while logged in; browser sends GET request with cookies; handleInviteAccept (line 267) processes invite acceptance without X-GP header check (GET method); victim unknowingly accepts invite and creates account; CSRF protection bypassed for state-changing GET endpoints"
+  }
+]
