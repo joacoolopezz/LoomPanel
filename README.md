@@ -14,6 +14,14 @@ El instalador detecta el SO, instala Docker si falta, te pregunta cuánta RAM, C
 opcionalmente un dominio (HTTPS automático con Caddy) y te muestra la URL y un **código de instalación** de un solo uso
 para crear la cuenta de administrador. Instalación manual: copia `.env.example` a `.env`, edítalo y ejecuta `docker compose up -d --build`.
 
+## Instalación rápida (one-liner)
+
+```bash
+curl -sSL https://raw.githubusercontent.com/joacoolopezz/LoomPanel/main/install.sh | sudo bash
+```
+
+Requiere: Linux (Ubuntu/Debian/CentOS/Fedora/Arch), root/sudo, conexión a internet.
+
 ## Qué incluye
 
 **Fase 1**
