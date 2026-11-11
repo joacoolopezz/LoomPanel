@@ -81,11 +81,15 @@ if (-not $disk) { $disk = 10 }
 $domain = Read-Host "Domain for panel (empty = localhost, no HTTPS)"
 $dataDir = "C:\loompanel\data"
 $port = 8080
-$token = -join ((48..57) + (97..122) | Get-Random -Count 12 | ForEach-Object { [char]$_ })
+# Cryptographically secure token (hex, 24 chars = 12 bytes)
+$bytes = [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes(12)
+$token = -join ($bytes | ForEach-Object { '{0:x2}' -f $_ })
 
 New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
+# Restrict data directory to current user
+icacls $dataDir /inheritance:r /grant:r "$env:USERNAME:F" >$null 2>&1
 
-# --- Write .env ---
+# --- Write .env (restrict to current user only) ---
 @"
 GP_DATA_DIR=$dataDir
 GP_GAME=minecraft
@@ -99,6 +103,9 @@ GP_TRUST_PROXY=0
 GP_LANG=es
 TZ=$(Get-TimeZone).Id
 "@ | Set-Content -Path ".\.env" -Encoding utf8
+
+# Restrict .env to current user (remove inheritance, grant only current user FullControl)
+icacls ".\.env" /inheritance:r /grant:r "$env:USERNAME:F" >$null 2>&1
 
 # --- Clone or update repo ---
 $repoDir = "C:\loompanel\app"
