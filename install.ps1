@@ -16,14 +16,14 @@ function Warn { Write-Host "[WARN] $args" -ForegroundColor Yellow }
 function Die { Write-Host "[ERROR] $args" -ForegroundColor Red; exit 1 }
 function Ask {
     param([string]$Prompt, [string]$Default = '')
-    $suffix = if ($Default) " [$Default]" else ""
+    if ($Default) { $suffix = " [$Default]" } else { $suffix = "" }
     $choice = Read-Host "$Prompt$suffix"
     if (-not $choice -and $Default) { return $Default }
     return $choice
 }
 function Confirm {
     param([string]$Prompt, [bool]$Default = $true)
-    $suffix = if ($Default) " [Y/n]" else " [y/N]"
+    if ($Default) { $suffix = " [Y/n]" } else { $suffix = " [y/N]" }
     $choice = (Read-Host "$Prompt$suffix").ToLower()
     if (-not $choice) { return $Default }
     return $choice -in @('y','yes','s','si')
