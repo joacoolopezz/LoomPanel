@@ -66,10 +66,12 @@ if (-not $wslStatus) {
 
 # --- Docker Desktop paths (check multiple common locations) ---
 $dockerDesktopPaths = @(
-    "C:\Program Files\Docker\Docker\Docker Desktop.exe",           # System-wide install (default)
-    "$env:LOCALAPPDATA\Docker\Docker\Docker Desktop.exe",           # Per-user install
-    "$env:PROGRAMFILES\Docker\Docker\Docker Desktop.exe",           # Alt ProgramFiles
-    "${env:ProgramFiles(x86)}\Docker\Docker\Docker Desktop.exe"     # 32-bit ProgramFiles
+    "C:\Program Files\Docker\Docker\Docker Desktop.exe",                    # System-wide install (default)
+    "$env:LOCALAPPDATA\Docker\Docker\Docker Desktop.exe",                   # Per-user install (old location)
+    "$env:PROGRAMFILES\Docker\Docker\Docker Desktop.exe",                   # Alt ProgramFiles
+    "${env:ProgramFiles(x86)}\Docker\Docker\Docker Desktop.exe",            # 32-bit ProgramFiles
+    "$env:LOCALAPPDATA\Programs\DockerDesktop\Docker Desktop.exe",          # Per-user install (new default location)
+    "$env:USERPROFILE\.docker\cli-plugins\docker-desktop.exe"               # Docker CLI plugin location
 )
 
 function Find-DockerDesktop {
