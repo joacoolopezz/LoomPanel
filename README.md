@@ -6,7 +6,7 @@ Un solo binario en Go + frontend React embebido + SQLite. Cada servidor corre ai
 ## Instalar (VPS Linux, como root)
 
 ```bash
-git clone <URL-DEL-REPO> loompanel && cd loompanel
+git clone <https://github.com/joacoolopezz/LoomPanel> loompanel && cd loompanel
 sudo bash install.sh
 ```
 
