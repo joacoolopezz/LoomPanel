@@ -34,6 +34,19 @@ if (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
     Die "Run PowerShell as Administrator (right-click → Run as Administrator)."
 }
 
+# --- Ensure git is installed ---
+if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+    Say "Git not found. Installing via winget..."
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        winget install --id Git.Git --accept-source-agreements --accept-package-agreements
+    } else {
+        Say "winget not found. Please install Git manually from https://git-scm.com/ and re-run this script."
+        exit 1
+    }
+    # Refresh PATH
+    $env:PATH = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+}
+
 # --- Detect OS ---
 Say "Detecting Windows version..."
 $ver = [System.Environment]::OSVersion.Version
@@ -51,24 +64,40 @@ if (-not $wslStatus) {
     Read-Host "Press Enter after reboot to continue..."
 }
 
-# --- Docker Desktop paths ---
-$dockerDesktopExe = "C:\Program Files\Docker\Docker\Docker Desktop.exe"
-$dockerCliPath = (Get-Command docker -ErrorAction SilentlyContinue).Source
+# --- Docker Desktop paths (check multiple common locations) ---
+$dockerDesktopPaths = @(
+    "C:\Program Files\Docker\Docker\Docker Desktop.exe",           # System-wide install (default)
+    "$env:LOCALAPPDATA\Docker\Docker\Docker Desktop.exe",           # Per-user install
+    "$env:PROGRAMFILES\Docker\Docker\Docker Desktop.exe",           # Alt ProgramFiles
+    "${env:ProgramFiles(x86)}\Docker\Docker\Docker Desktop.exe"     # 32-bit ProgramFiles
+)
 
-function Test-DockerDaemon {
-    # Returns $true if Docker daemon is responding
-    $null = docker version --format '{{.Server.Version}}' 2>$null
-    return $LASTEXITCODE -eq 0
+function Find-DockerDesktop {
+    foreach ($path in $dockerDesktopPaths) {
+        if (Test-Path $path) { return $path }
+    }
+    return $null
 }
 
 function Start-DockerDesktop {
     Say "Starting Docker Desktop..."
-    if (Test-Path $dockerDesktopExe) {
-        $proc = Start-Process -FilePath $dockerDesktopExe -ArgumentList "" -PassThru -WindowStyle Minimized
+    $exe = Find-DockerDesktop
+    if ($exe) {
+        $proc = Start-Process -FilePath $exe -ArgumentList "" -PassThru -WindowStyle Minimized
         return $true
     }
-    Warn "Docker Desktop executable not found at $dockerDesktopExe"
+    Warn "Docker Desktop executable not found in standard locations"
     return $false
+}
+
+function Test-DockerDaemon {
+    # Returns $true if Docker daemon is responding
+    try {
+        $null = docker version --format '{{.Server.Version}}' -ErrorAction SilentlyContinue 2>$null
+        return $LASTEXITCODE -eq 0
+    } catch {
+        return $false
+    }
 }
 
 function Wait-DockerDaemon {
@@ -100,10 +129,12 @@ function Show-DockerTroubleshooting {
     Write-Host "  5. Restart Windows if WSL2 was just enabled"
 }
 
-# --- Check/Install Docker Desktop ---
+# --- Check/Install/Start Docker Desktop ---
 Say "Checking Docker installation..."
 
-$dockerDesktopInstalled = Test-Path $dockerDesktopExe
+$dockerDesktopExe = Find-DockerDesktop
+$dockerDesktopInstalled = $null -ne $dockerDesktopExe
+$dockerCliPath = (Get-Command docker -ErrorAction SilentlyContinue).Source
 $dockerCliExists = $null -ne $dockerCliPath
 $dockerDaemonRunning = $false
 
@@ -111,65 +142,77 @@ if ($dockerCliExists) {
     $dockerDaemonRunning = Test-DockerDaemon
 }
 
-if (-not $dockerDesktopInstalled -and -not $dockerCliExists) {
-    # Docker not installed at all
-    Say "Docker Desktop is not installed."
-    if (Confirm "Install Docker Desktop now?") {
-        Say "Installing Docker Desktop via winget..."
-        if (Get-Command winget -ErrorAction SilentlyContinue) {
-            winget install --id Docker.DockerDesktop --accept-source-agreements --accept-package-agreements
-        } else {
-            Say "winget not found. Downloading Docker Desktop installer..."
-            $dl = "https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe"
-            $out = "$env:TEMP\DockerDesktopInstaller.exe"
-            Invoke-WebRequest -Uri $dl -OutFile $out
-            Start-Process -FilePath $out -ArgumentList "install --quiet" -Wait
-        }
-        Say "Docker Desktop installed."
-        $dockerDesktopInstalled = Test-Path $dockerDesktopExe
-    } else {
-        Die "Docker Desktop is required. Install it manually from https://www.docker.com/products/docker-desktop/ and re-run this script."
-    }
+if ($dockerDesktopInstalled) {
+    Say "Docker Desktop found at: $dockerDesktopExe"
 }
 
-# --- Ensure Docker Desktop is running ---
+# --- Auto-install Docker Desktop if missing ---
+if (-not $dockerDesktopInstalled -and -not $dockerCliExists) {
+    Say "Docker Desktop not found. Installing automatically..."
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        Say "Installing Docker Desktop via winget (this may take a few minutes)..."
+        winget install --id Docker.DockerDesktop --accept-source-agreements --accept-package-agreements
+    } else {
+        Say "winget not found. Downloading Docker Desktop installer with checksum verification..."
+        $dl = "https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe"
+        $out = "$env:TEMP\DockerDesktopInstaller.exe"
+        Invoke-WebRequest -Uri $dl -OutFile $out
+
+        # Verify SHA256 checksum against Docker's official release checksums (mandatory)
+        Say "Verifying installer checksum..."
+        $checksumUrl = "https://desktop.docker.com/win/main/amd64/sha256sum.txt"
+        $checksumContent = Invoke-WebRequest -Uri $checksumUrl -UseBasicParsing -ErrorAction Stop
+        $expectedHash = ($checksumContent.Content -split '\s+')[0].ToLower()
+        $actualHash = (Get-FileHash $out -Algorithm SHA256).Hash.ToLower()
+        if ($actualHash -ne $expectedHash) {
+            Die "Checksum verification FAILED! Expected: $expectedHash, Got: $actualHash. Download may be corrupted or compromised."
+        }
+        Say "Checksum verified: $actualHash"
+
+        Start-Process -FilePath $out -ArgumentList "install --quiet" -Wait
+    }
+    Say "Docker Desktop installed."
+    # Re-detect after install
+    Start-Sleep 5
+    $dockerDesktopExe = Find-DockerDesktop
+    $dockerDesktopInstalled = $null -ne $dockerDesktopExe
+    $dockerCliPath = (Get-Command docker -ErrorAction SilentlyContinue).Source
+    $dockerCliExists = $null -ne $dockerCliPath
+}
+
+# --- Auto-start Docker Desktop if installed but daemon not running ---
 if ($dockerDesktopInstalled -and -not $dockerDaemonRunning) {
-    Say "Docker Desktop is installed but daemon is not responding."
-    if (Confirm "Start Docker Desktop now?") {
-        if (Start-DockerDesktop) {
-            if (-not (Wait-DockerDaemon -TimeoutSeconds 120)) {
-                Show-DockerTroubleshooting
-                Die "Docker daemon failed to start. See troubleshooting steps above."
-            }
-        } else {
-            Die "Failed to start Docker Desktop. Try opening it manually from Start menu."
+    Say "Docker Desktop is installed but daemon not running. Starting automatically..."
+    $dockerDesktopExe = Find-DockerDesktop
+    if (Start-DockerDesktop) {
+        if (-not (Wait-DockerDaemon -TimeoutSeconds 180)) {
+            Show-DockerTroubleshooting
+            Die "Docker daemon failed to start after 3 minutes. See troubleshooting steps above."
         }
     } else {
-        Die "Docker daemon must be running to continue. Start Docker Desktop and re-run this script."
+        Die "Failed to start Docker Desktop. Try opening it manually from Start menu and re-run this script."
     }
 }
 elseif ($dockerCliExists -and -not $dockerDaemonRunning) {
     # CLI exists but daemon not running (maybe Docker Desktop not installed, or context issue)
     Say "Docker CLI found but daemon not responding."
-    if ($dockerDesktopInstalled) {
-        if (Confirm "Start Docker Desktop now?") {
-            if (Start-DockerDesktop) {
-                if (-not (Wait-DockerDaemon -TimeoutSeconds 120)) {
-                    Show-DockerTroubleshooting
-                    Die "Docker daemon failed to start. See troubleshooting steps above."
-                }
-            } else {
-                Die "Failed to start Docker Desktop."
+    $dockerDesktopExe = Find-DockerDesktop
+    if ($dockerDesktopExe) {
+        Say "Starting Docker Desktop automatically..."
+        if (Start-DockerDesktop) {
+            if (-not (Wait-DockerDaemon -TimeoutSeconds 180)) {
+                Show-DockerTroubleshooting
+                Die "Docker daemon failed to start after 3 minutes. See troubleshooting steps above."
             }
         } else {
-            Die "Docker daemon must be running."
+            Die "Failed to start Docker Desktop."
         }
     } else {
         # Docker CLI from elsewhere (e.g., Docker Engine, not Desktop)
-        Warn "Docker CLI found but Docker Desktop not detected. Ensure Docker daemon is running."
-        if (-not (Wait-DockerDaemon -TimeoutSeconds 60)) {
+        Warn "Docker CLI found but Docker Desktop not detected. Waiting for daemon..."
+        if (-not (Wait-DockerDaemon -TimeoutSeconds 120)) {
             Show-DockerTroubleshooting
-            Die "Docker daemon not responding."
+            Die "Docker daemon not responding after 2 minutes."
         }
     }
 }
@@ -185,12 +228,26 @@ $freeGB = [math]::Round((Get-PSDrive C).Free / 1GB)
 $recRam = [math]::Max(512, $totalRamGB * 1024 - 2048)
 Say "System: ${totalRamGB}GB RAM, ${cpuCount} CPU cores, ${freeGB}GB free on C:"
 
-$ram = Ask "RAM for game servers (MB)" $recRam
-$cpu = Ask "CPU cores for game servers" $cpuCount
-$disk = Ask "Disk for game servers (GB)" 10
+# Auto-use recommended values (user can override by passing env vars or editing .env later)
+$ram = $env:LOOMPANEL_RAM_MB
+if (-not $ram) { $ram = $recRam }
+else { Say "Using RAM from env: ${ram}MB" }
+
+$cpu = $env:LOOMPANEL_CPUS
+if (-not $cpu) { $cpu = $cpuCount }
+else { Say "Using CPU from env: ${cpu} cores" }
+
+$disk = $env:LOOMPANEL_DISK_GB
+if (-not $disk) { $disk = 10 }
+else { Say "Using disk from env: ${disk}GB" }
+
+Say "Resources allocated: ${ram}MB RAM, ${cpu} CPU cores, ${disk}GB disk"
 
 # --- Domain / Port ---
-$domain = Ask "Domain for panel (empty = localhost, no HTTPS)"
+$domain = $env:LOOMPANEL_DOMAIN
+if (-not $domain) {
+    $domain = Ask "Domain for panel (empty = localhost, no HTTPS)" ""
+}
 $dataDir = "C:\loompanel\data"
 $port = 8080
 # Cryptographically secure token (hex, 24 chars = 12 bytes)
@@ -199,7 +256,7 @@ $token = -join ($bytes | ForEach-Object { '{0:x2}' -f $_ })
 
 New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
 # Restrict data directory to current user
-icacls $dataDir /inheritance:r /grant:r "$env:USERNAME:F" >$null 2>&1
+icacls $dataDir /inheritance:r /grant:r "$env:USERNAME:(OI)(CI)F" >$null 2>&1
 
 # --- Write .env (restrict to current user only) ---
 @"
@@ -268,4 +325,4 @@ Write-Host "="*55
 if (-not $domain) {
     Say "Opening game ports in Windows Firewall..."
     New-NetFirewallRule -DisplayName "LoomPanel Game Ports" -Direction Inbound -Protocol TCP -LocalPort 25565-25665 -Action Allow -ErrorAction SilentlyContinue
-}# Cache bust
+}
