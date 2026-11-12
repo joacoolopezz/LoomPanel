@@ -85,7 +85,7 @@ function Start-DockerDesktop {
     Say "Starting Docker Desktop..."
     $exe = Find-DockerDesktop
     if ($exe) {
-        $proc = Start-Process -FilePath $exe -ArgumentList @() -PassThru -WindowStyle Minimized
+        $proc = Start-Process -FilePath $exe -PassThru -WindowStyle Minimized
         return $true
     }
     Warn "Docker Desktop executable not found in standard locations"
