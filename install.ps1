@@ -268,4 +268,4 @@ Write-Host "="*55
 if (-not $domain) {
     Say "Opening game ports in Windows Firewall..."
     New-NetFirewallRule -DisplayName "LoomPanel Game Ports" -Direction Inbound -Protocol TCP -LocalPort 25565-25665 -Action Allow -ErrorAction SilentlyContinue
-}
+}# Cache bust
