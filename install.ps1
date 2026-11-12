@@ -86,6 +86,8 @@ function Start-DockerDesktop {
     $exe = Find-DockerDesktop
     if ($exe) {
         $proc = Start-Process -FilePath $exe -PassThru -WindowStyle Minimized
+        # Ensure Docker context is set to desktop-linux for Docker Desktop
+        try { docker context use desktop-linux 2>$null | Out-Null } catch { }
         return $true
     }
     Warn "Docker Desktop executable not found in standard locations"
